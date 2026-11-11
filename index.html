@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Snake 3310</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1a2a4d">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Snake">
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --lcd: #c7f0d8;
+    --px: #43523d;
+    --bg: #e9e6df;
+    --hint: #555;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16181d; --hint: #999; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; min-height: 100dvh; gap: 14px;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+    font-family: system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; touch-action: manipulation;
+    -webkit-touch-callout: none; overscroll-behavior: none;
+  }
+  /* Na mobitelu (dodir) i kao instalirana aplikacija: bez uputa za tipkovnicu */
+  @media (pointer: coarse), (display-mode: standalone) {
+    .hint { display: none; }
+    body { overflow: hidden; }
+  }
+
+  /* ---- Kućište mobitela ---- */
+  .phone {
+    /* kućište je ~1,55× više nego šire: smanji ga da stane na nizak ekran */
+    width: min(320px, 100%);
+    width: min(320px, 100%, calc((100dvh - 40px) / 1.56));
+    padding: 22px 18px 30px;
+    border-radius: 48% 48% 40% 40% / 13% 13% 9% 9%;
+    background: linear-gradient(160deg, #4a64a0 0%, #2a3f6b 45%, #1a2a4d 100%);
+    box-shadow: 0 18px 40px rgba(0,0,0,.35), inset 0 2px 6px rgba(255,255,255,.25), inset 0 -6px 14px rgba(0,0,0,.4);
+  }
+  .face {
+    background: linear-gradient(180deg, #8c9cbd, #64769f);
+    border-radius: 46% 46% 30% 30% / 22% 22% 14% 14%;
+    padding: 26px 16px 14px;
+    box-shadow: inset 0 2px 4px rgba(255,255,255,.4), inset 0 -3px 6px rgba(0,0,0,.25);
+  }
+  .brand {
+    text-align: center; color: #e8ecf5; font-weight: 800; letter-spacing: .25em;
+    font-size: 13px; margin: -12px 0 8px; text-shadow: 0 1px 0 rgba(0,0,0,.3);
+  }
+  .screen {
+    background: #1d2431; border-radius: 12px 12px 22px 22px; padding: 10px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.6);
+  }
+  .lcd {
+    position: relative; aspect-ratio: 84 / 48; container-type: inline-size;
+    background: var(--lcd); border-radius: 3px; overflow: hidden;
+  }
+  .lcd canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+  .lcd::after { /* LCD mreža piksela */
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .18;
+    background-image:
+      linear-gradient(to right, #9cc7ad 1px, transparent 1px),
+      linear-gradient(to bottom, #9cc7ad 1px, transparent 1px);
+    background-size: calc(100% / 84) calc(100% / 48);
+  }
+  .overlay {
+    position: absolute; inset: 0; background: var(--lcd); color: var(--px);
+    font-family: "VT323", monospace; font-size: 9.6cqw; line-height: 1.02;
+    display: flex; flex-direction: column; justify-content: center; padding: 0 4cqw;
+  }
+  .overlay[hidden] { display: none; }
+  .overlay .title { text-align: center; border-bottom: .6cqw solid var(--px); margin-bottom: 1cqw; }
+  .overlay .item { display: flex; justify-content: space-between; padding: 0 1.5cqw; }
+  .overlay .item.sel { background: var(--px); color: var(--lcd); }
+  .overlay .foot { text-align: center; margin-top: 1cqw; }
+  .overlay .center { text-align: center; }
+
+  /* ---- Tipke ispod ekrana ---- */
+  .controls {
+    display: grid; grid-template-columns: 1fr 2fr 1fr; align-items: center; gap: 10px;
+    margin-top: 14px;
+  }
+  button {
+    font: inherit; border: none; cursor: pointer; color: #1c2640;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:active { filter: brightness(.85); transform: translateY(1px); }
+  .key-c {
+    justify-self: center; width: 42px; height: 30px; border-radius: 50%;
+    background: linear-gradient(#e2e6ee, #aeb7c9); font-weight: 800;
+    box-shadow: 0 2px 3px rgba(0,0,0,.35);
+  }
+  .navi {
+    height: 34px; border-radius: 40% 40% 50% 50% / 70% 70% 50% 50%;
+    background: linear-gradient(#f0f2f6, #b9c2d3); font-weight: 800; letter-spacing: .1em; font-size: 12px;
+    box-shadow: 0 3px 4px rgba(0,0,0,.35);
+  }
+  .rocker {
+    justify-self: center; display: flex; flex-direction: column; width: 34px; border-radius: 16px; overflow: hidden;
+    box-shadow: 0 2px 3px rgba(0,0,0,.35);
+  }
+  .rocker button { height: 22px; background: linear-gradient(#e2e6ee, #aeb7c9); font-size: 10px; }
+  .rocker button + button { border-top: 1px solid #8792a8; }
+
+  .keypad {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px 14px; margin-top: 18px; padding: 0 6px;
+  }
+  .keypad button {
+    height: 34px; border-radius: 45% 45% 50% 50% / 60% 60% 45% 45%;
+    background: linear-gradient(#d8deea, #9eaac2); font-weight: 800; font-size: 16px; line-height: 1;
+    box-shadow: 0 3px 4px rgba(0,0,0,.4);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .keypad button small { font-size: 8px; font-weight: 600; opacity: .7; letter-spacing: .05em; }
+  .keypad button.dir { background: linear-gradient(#eef1f7, #b4bfd4); }
+
+  .hint { color: var(--hint); font-size: 13px; text-align: center; line-height: 1.5; max-width: 340px; }
+  kbd { font-family: inherit; border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="face">
+    <div class="brand">SNAKE II</div>
+    <div class="screen">
+      <div class="lcd">
+        <canvas id="lcd" width="84" height="48"></canvas>
+        <div class="overlay" id="menu"></div>
+        <div class="overlay" id="msg" hidden></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="key-c" data-k="back" aria-label="C / natrag">C</button>
+    <button class="navi" data-k="ok" aria-label="OK">OK</button>
+    <div class="rocker">
+      <button data-k="up" aria-label="Gore">▲</button>
+      <button data-k="down" aria-label="Dolje">▼</button>
+    </div>
+  </div>
+
+  <div class="keypad">
+    <button>1<small>&nbsp;</small></button>
+    <button class="dir" data-k="up">2<small>▲</small></button>
+    <button>3<small>&nbsp;</small></button>
+    <button class="dir" data-k="left">4<small>◀</small></button>
+    <button data-k="ok">5<small>OK</small></button>
+    <button class="dir" data-k="right">6<small>▶</small></button>
+    <button>7<small>&nbsp;</small></button>
+    <button class="dir" data-k="down">8<small>▼</small></button>
+    <button>9<small>&nbsp;</small></button>
+    <button data-k="back">*<small>pauza</small></button>
+    <button>0<small>&nbsp;</small></button>
+    <button data-k="sound">#<small id="snd">zvuk</small></button>
+  </div>
+</div>
+
+<div class="hint">
+  <kbd>←↑→↓</kbd> / <kbd>WASD</kbd> / tipke 2·4·6·8 — smjer<br>
+  <kbd>Enter</kbd> / <kbd>5</kbd> — OK · <kbd>Esc</kbd> — pauza · <kbd>M</kbd> — zvuk
+</div>
+
+<script>
+const COLS = 20, ROWS = 9, OX = 2, OY = 10;      // 20×9 polja po 4 px unutar 84×48 LCD-a
+const SPEED = [0, 320, 260, 210, 170, 140, 115, 95, 75, 55]; // ms po koraku za razine 1–9
+const DIGITS = ['111101101101111', '010110010010111', '111001111100111', '111001111001111', '101101111001001',
+                '111100111001111', '111100111101111', '111001001001001', '111101111101111', '111101111001111'];
+const FOOD  = ['010', '101', '010'];
+const BONUS = ['101', '010', '101'];
+
+const cv = document.getElementById('lcd'), ctx = cv.getContext('2d');
+const menuEl = document.getElementById('menu'), msgEl = document.getElementById('msg');
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+
+let level = store.get('snake.level', 5);
+let walls = store.get('snake.walls', false);
+let best  = store.get('snake.best', 0);
+let sound = store.get('snake.sound', true);
+
+let state = 'menu', menuIdx = 0;
+let snake, dir, queue, food, bonus, eaten, score, lastStep = 0, dieAt = 0;
+
+// ---------- Zvuk ----------
+let audio;
+function beep(freq, ms) {
+  if (!sound) return;
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'square'; o.frequency.value = freq; g.gain.value = 0.04;
+    o.connect(g).connect(audio.destination);
+    o.start(); o.stop(audio.currentTime + ms / 1000);
+  } catch (e) {}
+}
+
+// ---------- Crtanje ----------
+const LCD = getComputedStyle(document.documentElement).getPropertyValue('--lcd').trim();
+const PX  = getComputedStyle(document.documentElement).getPropertyValue('--px').trim();
+
+function px(x, y) { ctx.fillRect(x, y, 1, 1); }
+function sprite(rows, x, y) {
+  rows.forEach((r, j) => [...r].forEach((c, i) => c === '1' && px(x + i, y + j)));
+}
+function num(n, x, y, len) {
+  String(n).padStart(len, '0').split('').forEach((d, i) => {
+    const g = DIGITS[+d];
+    for (let k = 0; k < 15; k++) if (g[k] === '1') px(x + i * 4 + (k % 3), y + Math.floor(k / 3));
+  });
+}
+const cellX = c => OX + c.x * 4, cellY = c => OY + c.y * 4;
+
+function draw(showSnake = true) {
+  ctx.fillStyle = LCD; ctx.fillRect(0, 0, 84, 48);
+  ctx.fillStyle = PX;
+  num(score, 1, 1, 4);
+  if (bonus) { sprite(BONUS, 66, 2); num(bonus.t, 71, 1, 3); }
+  // okvir igrališta
+  ctx.fillRect(0, 8, 84, 1); ctx.fillRect(0, 47, 84, 1);
+  ctx.fillRect(0, 8, 1, 40); ctx.fillRect(83, 8, 1, 40);
+  if (!walls) { // isprekidani okvir = prolaz kroz zid
+    ctx.fillStyle = LCD;
+    for (let x = 2; x < 83; x += 2) { px(x, 8); px(x, 47); }
+    for (let y = 10; y < 47; y += 2) { px(0, y); px(83, y); }
+    ctx.fillStyle = PX;
+  }
+  if (food) sprite(FOOD, cellX(food), cellY(food));
+  if (bonus) sprite(BONUS, cellX(bonus), cellY(bonus));
+  if (!showSnake) return;
+  snake.forEach((s, i) => {
+    const x = cellX(s), y = cellY(s);
+    ctx.fillRect(x, y, 3, 3);
+    const n = snake[i + 1];
+    if (n) { // spoj sa sljedećim segmentom (samo ako su susjedni, ne preko ruba)
+      const dx = n.x - s.x, dy = n.y - s.y;
+      if (dx === 1) ctx.fillRect(x + 3, y, 1, 3);
+      if (dx === -1) ctx.fillRect(x - 1, y, 1, 3);
+      if (dy === 1) ctx.fillRect(x, y + 3, 3, 1);
+      if (dy === -1) ctx.fillRect(x, y - 1, 3, 1);
+    }
+  });
+  // oko na glavi
+  const h = snake[0];
+  ctx.fillStyle = LCD;
+  if (dir[0] !== 0) px(cellX(h) + 1, cellY(h)); else px(cellX(h), cellY(h) + 1);
+}
+
+// ---------- Izbornik i poruke ----------
+function renderMenu() {
+  const items = [
+    ['Nova igra', ''],
+    ['Razina', '◂' + level + '▸'],
+    ['Zidovi', walls ? 'Da' : 'Ne'],
+  ];
+  menuEl.innerHTML = '<div class="title">Snake II</div>' +
+    items.map((it, i) => `<div class="item${i === menuIdx ? ' sel' : ''}"><span>${it[0]}</span><span>${it[1]}</span></div>`).join('') +
+    `<div class="foot">Rekord: ${best}</div>`;
+}
+function showMsg(html) { msgEl.innerHTML = html; msgEl.hidden = false; }
+function hideMsg() { msgEl.hidden = true; }
+
+// ---------- Logika igre ----------
+function freeCell(extra = []) {
+  const taken = new Set([...snake, ...extra].filter(Boolean).map(c => c.x + ',' + c.y));
+  const free = [];
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (!taken.has(x + ',' + y)) free.push({ x, y });
+  return free.length ? free[Math.floor(Math.random() * free.length)] : null;
+}
+
+function start() {
+  snake = [{ x: 6, y: 4 }, { x: 5, y: 4 }, { x: 4, y: 4 }, { x: 3, y: 4 }, { x: 2, y: 4 }];
+  dir = [1, 0]; queue = []; bonus = null; eaten = 0; score = 0;
+  food = freeCell();
+  state = 'play'; menuEl.hidden = true; hideMsg();
+  lastStep = performance.now();
+  draw();
+}
+
+function step() {
+  if (queue.length) dir = queue.shift();
+  const h = snake[0];
+  let nx = h.x + dir[0], ny = h.y + dir[1];
+  if (walls) {
+    if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) return die();
+  } else {
+    nx = (nx + COLS) % COLS; ny = (ny + ROWS) % ROWS;
+  }
+  const grow = food && nx === food.x && ny === food.y;
+  const body = grow ? snake : snake.slice(0, -1); // rep se pomiče, pa u njega smiješ ući
+  if (body.some(s => s.x === nx && s.y === ny)) return die();
+
+  snake.unshift({ x: nx, y: ny });
+  if (grow) {
+    score += level; eaten++;
+    beep(1200, 40);
+    food = freeCell([bonus]);
+    if (!food) return win();
+    if (eaten % 5 === 0 && !bonus) {
+      const c = freeCell([food]);
+      if (c) bonus = { ...c, t: 20 };
+    }
+  } else {
+    snake.pop();
+  }
+  if (bonus) {
+    if (nx === bonus.x && ny === bonus.y) {
+      score += level * Math.ceil(bonus.t / 2) + 5;
+      beep(1600, 90);
+      bonus = null;
+    } else if (--bonus.t <= 0) {
+      bonus = null;
+    }
+  }
+}
+
+function saveBest() {
+  if (score > best) { best = score; store.set('snake.best', best); return true; }
+  return false;
+}
+function die() {
+  state = 'dying'; dieAt = performance.now();
+  beep(220, 300);
+}
+function finish() {
+  const rec = saveBest();
+  state = 'over';
+  showMsg(`<div class="center">Kraj igre!</div><div class="center">Bodovi: ${score}</div>` +
+          (rec ? '<div class="center">Novi rekord!</div>' : `<div class="center">Rekord: ${best}</div>`) +
+          '<div class="center">OK = dalje</div>');
+}
+function win() {
+  saveBest(); state = 'over';
+  showMsg(`<div class="center">Pobjeda!</div><div class="center">Bodovi: ${score}</div><div class="center">OK = dalje</div>`);
+}
+function toMenu() {
+  state = 'menu'; hideMsg(); menuEl.hidden = false; renderMenu();
+}
+
+// ---------- Unos ----------
+const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+
+function handle(k) {
+  if (k === 'sound') {
+    sound = !sound; store.set('snake.sound', sound);
+    document.getElementById('snd').textContent = sound ? 'zvuk' : 'tiho';
+    return;
+  }
+  if (state === 'menu') {
+    if (k === 'up') menuIdx = (menuIdx + 2) % 3;
+    else if (k === 'down') menuIdx = (menuIdx + 1) % 3;
+    else if (k === 'ok' || k === 'left' || k === 'right') {
+      const delta = k === 'left' ? -1 : 1;
+      if (menuIdx === 0 && k === 'ok') return start();
+      if (menuIdx === 1) { level = ((level - 1 + delta + 9) % 9) + 1; store.set('snake.level', level); }
+      if (menuIdx === 2) { walls = !walls; store.set('snake.walls', walls); }
+    }
+    beep(900, 15);
+    renderMenu();
+  } else if (state === 'play') {
+    if (DIRS[k]) {
+      const last = queue.length ? queue[queue.length - 1] : dir;
+      const d = DIRS[k];
+      if (queue.length < 3 && !(d[0] === -last[0] && d[1] === -last[1]) && !(d[0] === last[0] && d[1] === last[1])) queue.push(d);
+    } else if (k === 'ok' || k === 'back') {
+      state = 'pause';
+      showMsg('<div class="center">Pauza</div><div class="center">OK = nastavi</div><div class="center">C = izbornik</div>');
+    }
+  } else if (state === 'pause') {
+    if (k === 'ok') { state = 'play'; hideMsg(); lastStep = performance.now(); }
+    else if (k === 'back') { saveBest(); toMenu(); }
+  } else if (state === 'over') {
+    if (k === 'ok' || k === 'back') toMenu();
+  }
+}
+
+const KEYS = {
+  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+  KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right',
+  Digit2: 'up', Digit8: 'down', Digit4: 'left', Digit6: 'right', Digit5: 'ok',   // raspored tipkovnice mobitela
+  Numpad8: 'up', Numpad2: 'down', Numpad4: 'left', Numpad6: 'right', Numpad5: 'ok', // raspored numeričke tipkovnice
+  Enter: 'ok', NumpadEnter: 'ok', Space: 'ok', Escape: 'back', Backspace: 'back', KeyP: 'back', KeyM: 'sound'
+};
+document.addEventListener('keydown', e => {
+  const k = KEYS[e.code];
+  if (!k) return;
+  e.preventDefault();
+  if (!e.repeat) handle(k);
+});
+document.querySelectorAll('button[data-k]').forEach(b =>
+  b.addEventListener('pointerdown', e => { e.preventDefault(); handle(b.dataset.k); }));
+
+// ---------- Glavna petlja ----------
+function loop(t) {
+  if (state === 'play' && t - lastStep >= SPEED[level]) {
+    lastStep = t;
+    step();
+    draw();
+  } else if (state === 'dying') {
+    const e = t - dieAt;
+    draw(Math.floor(e / 150) % 2 === 1); // zmija treperi
+    if (e > 1200) { draw(); finish(); }
+  }
+  requestAnimationFrame(loop);
+}
+
+// Kad se aplikacija skloni u pozadinu (poziv, druga aplikacija), igra se pauzira.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state === 'play') handle('back');
+});
+
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+document.getElementById('snd').textContent = sound ? 'zvuk' : 'tiho';
+snake =[{ x: 6, y: 4 }, { x: 5, y: 4 }, { x: 4, y: 4 }, { x: 3, y: 4 }, { x: 2, y: 4 }];
+dir = [1, 0]; score = 0; food = null; bonus = null;
+draw();
+renderMenu();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
